@@ -243,11 +243,11 @@ main > section#week { padding-top: var(--s-6); }
     gap: var(--s-5) var(--s-6); padding: var(--s-5) var(--s-6);
   }
   .verdict > .acts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-5); padding: 0 0 0 var(--s-6); border-top: 0; border-left: 1px solid var(--line); align-items: start; }
-  .verdict .act-head { flex-wrap: wrap; gap: 0 var(--s-3); }
+  .verdict .act-head { flex-direction: column; align-items: flex-start; gap: 0; }
   .verdict > .moon-card { grid-column: 1 / -1; }
 }
 @media (min-width: 1400px) {
-  .verdict-hero > .verdict { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .verdict-hero > .verdict { grid-template-columns: 280px minmax(0, 1fr) 380px; }
   .verdict .moon-meta { white-space: nowrap; }
   .verdict > .moon-card { grid-column: auto; padding: 0 0 0 var(--s-6); border-top: 0; border-left: 1px solid var(--line); }
 }
@@ -307,7 +307,7 @@ main > section#week { padding-top: var(--s-6); }
 .week-tip b { color: var(--accent); font-weight: 500; }
 @media (max-width: 1023px) {
   .week-head { grid-template-columns: minmax(0, 1fr); }
-  .week-tip { min-width: 0; white-space: normal; }
+  .week-tip { width: 100%; max-width: calc(38ch + 2 * var(--s-4) + 2px); }
 }
 .week-legend { margin-top: var(--s-4); }
 .fold { margin-top: var(--s-7); border-bottom: 1px solid var(--line); }
@@ -380,7 +380,6 @@ table.cs td.nowcol { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accen
 .arw { display: inline-block; font: 500 var(--t-label)/1 var(--font-mono); color: var(--muted); }
 .grid-legend { margin-top: var(--s-4); }
 .cell-detail { min-height: 1.5em; margin-top: var(--s-2); font-size: var(--t-small); line-height: 1.5; color: var(--ink); }
-.cell-detail:empty { min-height: 0; margin-top: 0; }
 table.cs td.is-picked { box-shadow: inset 0 0 0 2px var(--accent); }
 table.cs td[title] { cursor: pointer; }
 
@@ -443,6 +442,21 @@ table.plain caption { padding-bottom: var(--s-2); text-align: left; font: 500 va
 /* ---------- footer: what the page is, the name set wide, the sections and every credit ---------- */
 .close__word { font-size: clamp(32px, 9.6vw, 138px); line-height: 1.1; overflow: visible; }   /* 17 letters across the .wrap (the kit sizes it for 8) */
 
+/* ---------- boxes whose text changes keep one size (a hover, another night, another radar frame) ---------- */
+.week-tip { box-sizing: border-box; width: calc(38ch + 2 * var(--s-4) + 2px); min-width: 0; height: calc(4 * 1.65em + 2 * var(--s-3) + 2px); overflow: hidden; }
+.verdict-line { flex-direction: column; align-items: flex-start; gap: 0; }
+#more-btn, #nights-more { min-width: 200px; }
+.chip { width: 16.5em; justify-content: flex-end; }
+/* the radar: the frame's time on its own line above Play and a full-width slider */
+.radar__controls { grid-template-columns: auto minmax(0, 1fr); row-gap: var(--s-2); }
+.radar__time { grid-column: 1 / -1; grid-row: 1; width: auto; min-width: 0; text-align: left; }
+.cell-detail { min-height: 1.5em; }
+@media (max-width: 1023px) { .week-tip { width: 100%; max-width: calc(38ch + 2 * var(--s-4) + 2px); } }
+@media (max-width: 639px) {
+  .week-tip { font-size: var(--t-label); }   /* 38 characters of 13px fit a phone's column on one line each */
+  .cell-detail { min-height: 3em; }           /* room for two lines, so a longer reading never pushes the legend down */
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 1279px) { .events { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 1023px) {
@@ -475,7 +489,7 @@ table.plain caption { padding-bottom: var(--s-2); text-align: left; font: 500 va
 @media (max-width: 639px) {
   table.cs th[scope="row"], table.cs .corner { min-width: 136px; padding-right: var(--s-2); }
   .fold > summary { grid-template-columns: minmax(0, 1fr) auto; }
-  .chip { grid-column: 1; grid-row: auto; }
+  .chip { grid-column: 1; grid-row: auto; width: auto; justify-content: flex-start; }
   .fold__mark { grid-column: 2; grid-row: 1 / span 3; }
   .bar-g { width: 96px; }
   table.cs td, table.cs tr.r-hour th:not(.corner) { height: 24px; }
