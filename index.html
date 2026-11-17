@@ -122,6 +122,11 @@ html.nv { filter: url(#nv-filter); }
 }
 .sky__moon.is-full::before { background: radial-gradient(closest-side, rgb(255 240 205 / .28), rgb(255 240 205 / .09) 42%, transparent 72%); -webkit-mask-image: none; mask-image: none; }
 .sky__moon svg { position: relative; filter: drop-shadow(0 0 14px rgb(255 240 205 / .5)); }
+/* the town on the horizon: St. Bavo and Haarlem's gables on the Spaarne, the windows lit warm; it sinks with the
+   horizon as the page scrolls. The drawing is wider than its box, so a narrow screen crops the sides round the church. */
+.sky__town { position: absolute; left: 0; right: 0; bottom: 0; height: max(26.25vw, 210px); will-change: transform;
+  transform: translate3d(0, calc(var(--sky-p, 0) * 26vh), 0); }
+.sky__town svg { display: block; width: 100%; height: 100%; }
 @media (max-width: 639px) {
   .sky__moon { display: none; }
   .sky__mask { -webkit-mask-image: var(--fade); mask-image: var(--fade); }
@@ -129,12 +134,12 @@ html.nv { filter: url(#nv-filter); }
   .sky__stars { opacity: .6; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sky__grad, .sky__stars--far, .sky__stars--near, .sky__moon { transform: none; }
+  .sky__grad, .sky__stars--far, .sky__stars--near, .sky__moon, .sky__town { transform: none; }
   .sky__stars i.tw { animation: none; }
 }
 /* Night vision keeps the screen dim: the bright horizon gives way to a flat dark sky */
 html.nv .sky__grad { background: var(--nv-sky); }
-html.nv .sky__mask, html.nv .sky__moon { display: none; }
+html.nv .sky__mask, html.nv .sky__moon, html.nv .sky__town { display: none; }
 .nav { background: var(--nav-bg); }
 .nav.is-open { background: var(--bg); }
 main > section:not(.hero) > .wrap {
@@ -555,6 +560,7 @@ table.plain caption { padding-bottom: var(--s-2); text-align: left; font: 500 va
   <div class="sky__grad"></div>
   <div class="sky__mask"><div class="sky__stars sky__stars--far" id="stars-far"></div><div class="sky__stars sky__stars--near" id="stars-near"></div></div>
   <div class="sky__moon"><canvas id="sky-moon" width="112" height="112"></canvas></div>
+  <div class="sky__town" id="sky-town"></div>
 </div>
 
 <header class="nav">
@@ -916,6 +922,147 @@ table.plain caption { padding-bottom: var(--s-2); text-align: left; font: 500 va
   const set = () => { tick = 0; const y = window.scrollY || 0; root.style.setProperty('--sky-y', y.toFixed(0)); root.style.setProperty('--sky-p', Math.min(1, y / (2.5 * window.innerHeight || 1)).toFixed(3)); };
   window.addEventListener('scroll', () => { if (!tick) tick = requestAnimationFrame(set); }, { passive: true });
   window.addEventListener('resize', set); set();
+})();
+/* The town on the horizon, drawn once as SVG: the Grote of St.-Bavokerk on the Spaarne with gabled houses either side,
+   their windows lit warm yellow, all of it mirrored and rippled in the river. The church follows its real shape: the
+   west end with its corner pinnacle and the small stair turret, six nave bays of tall windows between pinnacled
+   buttresses over the lower aisle, the slate roofs a shade lighter than the stone, the north transept front with its
+   great traceried window, two round ornaments, the gallery and two slender corner spires, then the choir and its apse;
+   and the crossing tower: the clock stage, the tall octagon with two tiers of paired openings, the gallery, the open
+   crown and the needle spire with its orb and weathervane. */
+(() => {
+  const box = document.getElementById('sky-town'); if (!box) return;
+  let seed = 7;
+  const r = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const WARM = ['#ffd27a', '#ffc45e', '#ffe2a3', '#ffb650', '#ffcf85', '#ffd98f'], warm = () => WARM[Math.floor(r() * WARM.length)];
+  const WALL = '#111833', ROOF = '#1d2853', LEAD = '#161f44', DARK = '#1d2852';
+  // a pointed window from the sill y0 up to the tip y1 (y grows downward)
+  const arch = (x0, x1, y0, y1) => { const q = (x1 - x0) / 2, m = (x0 + x1) / 2; return `M${x0},${y0}L${x0},${y1 + q * 1.25}Q${x0},${y1 + q * .25} ${m},${y1}Q${x1},${y1 + q * .25} ${x1},${y1 + q * 1.25}L${x1},${y0}Z`;
+  };
+  const spire = (x0, x1, y0, top) => `M${x0},0L${x0},${y0}L${(x0 + x1) / 2},${top}L${x1},${y0}L${x1},0Z`;
+
+  function church(lit) {
+    const wall = [], roof = [], lead = [], wins = [], pale = [];
+    // aisles and chapels, their lean-to roofs, then the tall nave and choir walls and the high roof; in the east the
+    // choir and its ambulatory end in an apse, the roofs hipping down in two steps
+    wall.push('M0,0L0,-72L580,-72L580,0Z');
+    roof.push('M0,-72L0,-105L565,-105L580,-72Z');
+    wall.push('M4,-104L4,-160L565,-160L565,-104Z');
+    roof.push('M4,-159L4,-210L522,-210L566,-159Z');
+    wall.push('M1,-209L4,-224L7,-209Z');                                       // west gable finial
+    wall.push(spire(-3, 8, -204, -244));                                       // west corner pinnacle
+    wall.push('M26,-72L26,-174L33,-224L40,-174L40,-72Z');                      // the stair turret by the west front
+    const nave = [10, 46, 82, 118, 154, 190, 226], choir = [374, 410, 446, 482, 518, 554];
+    for (const b of [nave, choir]) {
+      for (const x of b) wall.push(`M${x - 3},-72L${x},-114L${x + 3},-72Z M${x - 2.6},-159L${x},-182L${x + 2.6},-159Z`);
+      for (let i = 0; i < b.length - 1; i++) {
+        const m = (b[i] + b[i + 1]) / 2;
+        wins.push({ d: arch(m - 8, m + 8, -110, -158), lit: r() < lit + .15 });   // the tall clerestory windows
+        wins.push({ d: arch(m - 5.5, m + 5.5, -14, -50), lit: r() < lit - .15 });  // the lower aisle and chapel windows
+      }
+    }
+    // the north transept front: the gable over a gallery, two round ornaments, the great traceried window, two
+    // slender corner spires
+    wall.push('M236,0L236,-162L300,-246L364,-162L364,0Z');
+    wall.push('M231,-172L369,-172L369,-160L231,-160Z');
+    wall.push('M297,-244L300,-268L303,-244Z M294,-261L306,-261L306,-258L294,-258Z');
+    wall.push(spire(227, 243, -214, -268), spire(357, 373, -214, -268));
+    wall.push(spire(266.5, 271.5, -170, -196), spire(328.5, 333.5, -170, -196));
+    wins.push({ d: arch(254, 346, -44, -156), lit: true });                    // the great window
+    wins.push({ d: arch(289, 311, 0, -36), lit: true });                       // the door
+    pale.push([279, -198, 7], [321, -198, 7]);
+    const tracery = 'M272.4,-44L272.4,-124M290.8,-44L290.8,-124M309.2,-44L309.2,-124M327.6,-44L327.6,-124M254,-92L346,-92';
+    // the crossing tower, seen just left of the transept as it is from the Grote Markt: the clock stage at the ridge,
+    // the tall octagon with two tiers of long paired openings, the gallery, a smaller stage, the open crown, the needle
+    const c = 190;
+    lead.push(`M${c - 22},-190L${c - 22},-240L${c + 22},-240L${c + 22},-190Z`);
+    lead.push(`M${c - 22},-239L${c - 19},-253L${c - 16},-239Z M${c + 16},-239L${c + 19},-253L${c + 22},-239Z`);
+    lead.push(`M${c - 18},-239L${c - 18},-331L${c + 18},-331L${c + 18},-239Z`);
+    lead.push(`M${c - 18},-330L${c - 15.5},-344L${c - 13},-330Z M${c + 13},-330L${c + 15.5},-344L${c + 18},-330Z`);
+    lead.push(`M${c - 20},-336L${c - 20},-330L${c + 20},-330L${c + 20},-336Z`);
+    lead.push(`M${c - 13},-335L${c - 13},-353L${c + 13},-353L${c + 13},-335Z`);
+    lead.push(`M${c - 14},-352C${c - 17},-362 ${c - 7},-368 ${c},-380C${c + 7},-368 ${c + 17},-362 ${c + 14},-352Z`);
+    lead.push(`M${c - 1.4},-379L${c},-400L${c + 1.4},-379Z M${c - 2.5},-389a2.5,2.5 0 1,0 5,0a2.5,2.5 0 1,0 -5,0Z M${c - .6},-408L${c + .6},-408L${c + .6},-391L${c - .6},-391Z M${c + .6},-407L${c + 9},-404L${c + .6},-401Z`);
+    for (const [y0, y1] of [[-248, -286], [-293, -325]]) { wins.push({ d: arch(c - 12, c - 3.5, y0, y1), lit: true }); wins.push({ d: arch(c + 3.5, c + 12, y0, y1), lit: true }); }
+    wins.push({ d: arch(c - 8, c - 2, -338, -350), lit: true }, { d: arch(c + 2, c + 8, -338, -350), lit: true });
+    wins.push({ d: arch(c - 6, c - 1.5, -355, -365), lit: true }, { d: arch(c + 1.5, c + 6, -355, -365), lit: true });
+    pale.push([c, -216, 9.5]);                                                // the clock
+    return { wall, roof, lead, wins, pale, tracery, rose: [300, -126, 13], clock: c, clockY: -216 };
+  }
+
+  function house(x, w, h, kind, G, lit) {
+    const top = G - h, gh = kind === 'flat' ? 0 : w * (kind === 'neck' ? .95 : kind === 'gable' ? .62 : .78);
+    let d = `M${x},${G}L${x},${top}`;
+    if (kind === 'step') {
+      const k = w > 30 ? 3 : 2, sw = w / (2 * k + 1), sh = gh / (k + 1);
+      let cx = x, cy = top;
+      for (let i = 0; i < k; i++) { cy -= sh; d += `L${cx},${cy}`; cx += sw; d += `L${cx},${cy}`; }
+      cy -= sh; d += `L${cx},${cy}`; cx = x + w - k * sw; d += `L${cx},${cy}`;
+      for (let i = 0; i < k; i++) { cy += sh; d += `L${cx},${cy}`; cx += sw; d += `L${cx},${cy}`; }
+      d += `L${x + w},${top}`;
+    } else if (kind === 'bell') {
+      d += `Q${x + w * .08},${top - gh * .42} ${x + w * .28},${top - gh * .55}L${x + w * .28},${top - gh * .8}Q${x + w / 2},${top - gh * 1.08} ${x + w * .72},${top - gh * .8}L${x + w * .72},${top - gh * .55}Q${x + w * .92},${top - gh * .42} ${x + w},${top}`;
+    } else if (kind === 'neck') {
+      d += `L${x + w * .22},${top}L${x + w * .22},${top - gh * .78}L${x + w / 2},${top - gh}L${x + w * .78},${top - gh * .78}L${x + w * .78},${top}L${x + w},${top}`;
+    } else if (kind === 'gable') {
+      d += `L${x + w / 2},${top - gh}L${x + w},${top}`;
+    } else {
+      d += `L${x - 1.5},${top}L${x - 1.5},${top - 3}L${x + w + 1.5},${top - 3}L${x + w + 1.5},${top}L${x + w},${top}`;
+    }
+    d += `L${x + w},${G}Z`;
+    const wins = [], n = w < 28 ? 2 : 3, ww = 5.5, gap = (w - n * ww) / (n + 1);
+    for (let y = top + 7; y < G - 14; y += 17) for (let k = 0; k < n; k++) wins.push([x + gap + k * (ww + gap), y, ww, 9, r() < lit]);
+    if (gh > 10) wins.push([x + w / 2 - 2.5, top - gh * .5, 5, 7, r() < lit * .8]);
+    return { d, wins };
+  }
+
+  const G = 372, CS = .58, LIT = .5;
+  /* the church stands to the right, where the sky is open: the tower, the transept and the choir in the space beside
+     the page's sheets when it is wide enough, else against the right edge. Drawn again when the window changes size. */
+  const draw = () => {
+  seed = 7;
+  const W = window.innerWidth, H = box.getBoundingClientRect().height || Math.max(W * .2625, 210);
+  const sc = Math.max(W / 1600, H / 420), off = (W - 1600 * sc) / 2;
+  const sheet = document.querySelector('#week .wrap'), sheetR = sheet ? sheet.getBoundingClientRect().right : W;
+  const margin = W - sheetR, east = (584 - 170) * CS * sc;
+  const eastAt = margin >= east + 48 ? sheetR + (margin - east) / 2 : W - 16 - east;
+  const OX = (eastAt - off) / sc - 170 * CS;
+  const ch = church(LIT);
+  const houses = [];
+  for (let x = -900; x < 2500;) {
+    const w = 22 + r() * 20, h = 34 + r() * 32, kind = ['step', 'bell', 'neck', 'gable', 'flat', 'step', 'bell'][Math.floor(r() * 7)];
+    if (x + w < OX - 24 || x > OX + 584 * CS + 24) houses.push(house(x, w, h, kind, G, LIT));
+    x += w + (r() < .14 ? 6 + r() * 14 : .6);
+  }
+  const P = (list, fill) => `<g fill="${fill}">${list.map((d) => `<path d="${d}"/>`).join('')}</g>`;
+  const scene = `<g transform="translate(${OX.toFixed(1)},${G}) scale(${CS})">
+      ${P(ch.roof, ROOF)}${P(ch.wall, WALL)}${P(ch.lead, LEAD)}
+      <g filter="url(#town-glow)">${ch.wins.map((w) => `<path d="${w.d}" fill="${w.lit ? warm() : DARK}"/>`).join('')}
+        ${ch.pale.map(([x, y, rr]) => `<circle cx="${x}" cy="${y}" r="${rr}" fill="#ffe9bd"/>`).join('')}</g>
+      <g stroke="${WALL}" stroke-width="2.4" fill="none"><path d="${ch.tracery}"/><circle cx="${ch.rose[0]}" cy="${ch.rose[1]}" r="${ch.rose[2]}"/></g>
+      <path d="M${ch.clock},${ch.clockY}L${ch.clock},${ch.clockY - 7}M${ch.clock},${ch.clockY}L${ch.clock + 5},${ch.clockY + 2}" stroke="#2a2a3a" stroke-width="1.6" stroke-linecap="round"/>
+    </g>
+    <g fill="${WALL}">${houses.map((hh) => `<path d="${hh.d}"/>`).join('')}</g>
+    <g filter="url(#town-glow)">${houses.map((hh) => hh.wins.map(([x, y, w, h, on]) => `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w}" height="${h}" rx=".8" fill="${on ? warm() : DARK}"/>`).join('')).join('')}</g>`;
+  const ripples = Array.from({ length: 12 }, (_, i) => `<path d="M-900,${G + 4 + i * 4}H2500" stroke-dasharray="${30 + i * 7} ${12 + i * 3}" stroke-dashoffset="${i * 37}"/>`).join('');
+  box.innerHTML = `<svg viewBox="0 0 1600 420" preserveAspectRatio="xMidYMax slice" overflow="visible" aria-hidden="true" focusable="false">
+    <defs>
+      <filter id="town-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <filter id="town-blur"><feGaussianBlur stdDeviation="1.6 2.6"/></filter>
+      <radialGradient id="town-halo"><stop offset="0" stop-color="#ffc27a" stop-opacity=".9"/><stop offset=".5" stop-color="#ffb06a" stop-opacity=".35"/><stop offset="1" stop-color="#ffb06a" stop-opacity="0"/></radialGradient>
+      <linearGradient id="town-water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a3566"/><stop offset="1" stop-color="#0e1531"/></linearGradient>
+      <clipPath id="town-clip"><rect x="-900" y="${G}" width="3400" height="${420 - G}"/></clipPath>
+    </defs>
+    <ellipse cx="${(OX + 250 * CS).toFixed(0)}" cy="${G - 150 * CS}" rx="${420 * CS}" ry="${260 * CS}" fill="url(#town-halo)" opacity=".25"/>
+    <g id="town-scene">${scene}</g>
+    <rect x="-900" y="${G}" width="3400" height="${420 - G}" fill="url(#town-water)"/>
+    <g clip-path="url(#town-clip)" opacity=".42" filter="url(#town-blur)"><use href="#town-scene" transform="translate(0,${2 * G}) scale(1,-1)"/></g>
+    <g stroke="#0c1330" stroke-width="1.6" opacity=".9">${ripples}</g>
+    <path d="M-900,${G}H2500" stroke="#ffcf85" stroke-width="1" opacity=".35"/>
+  </svg>`;
+  };
+  draw();
+  let again = 0; window.addEventListener('resize', () => { clearTimeout(again); again = setTimeout(draw, 200); });
 })();
 /* touch: a tapped grid cell shows its tooltip text in the line under its table */
 document.addEventListener('click', (e) => {
