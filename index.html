@@ -1206,7 +1206,7 @@ function verdict(score, cloud) {
   if (score >= 55) return { w: 'Good', c: 'good' };
   if (score >= 35) return { w: 'Fair', c: 'warn' };
   if (score >= 15) return { w: 'Poor', c: 'bad' };
-  return { w: nn(cloud) && cloud > 70 ? 'Clouded out' : 'Poor', c: 'bad' };
+  return { w: nn(cloud) && cloud > 70 ? 'Clouded' : 'Poor', c: 'bad' };
 }
 
 function attachWeather(n) {
