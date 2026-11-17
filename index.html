@@ -303,7 +303,7 @@ main > section#week { padding-top: var(--s-6); }
 .sw--moon { background: var(--moon-lit); }
 .sw--line { height: 1.5px; background: #ff3030; }
 .sw--moonalt { height: 2px; background: #3d7bff; }
-.sw--phase { height: 2px; background: #ff4fd8; }
+.sw--phase { height: 2px; background: #ffa646; }
 .sw--sel { height: var(--s-3); border: 1.5px solid #ffd23f; }
 .sw--range { height: var(--s-2); border-block: 1px solid #ff3030; }
 .bar-g { flex: none; width: 144px; height: var(--s-3); }
@@ -1652,7 +1652,7 @@ function weekAstro(t) {
    nearest hours, lightly smoothed, through the same colour scale), so neighbouring hours blend instead of making bars:
    cloud: blue under 50 % (the bluer, the clearer), grey over 50 % (the darker, the thicker), a thin red line for the
    forecast; rain: the redder, the wetter, with a white line; moon: the
-   lighter, the fuller (thin magenta line), with its height above the horizon as a blue line. */
+   lighter, the fuller (thin light orange line), with its height above the horizon as a blue line. */
 const WEEK_H = 440;
 function weekCloudRGB(cl) {
   const mixc = (p, q, t) => p.map((v, k) => Math.round(v + (q[k] - v) * clamp(t)));
@@ -1784,7 +1784,7 @@ function drawWeek() {
     key: [[0, 'rgb(14,19,38)'], [1, 'rgb(236,230,212)']],
     draw: Y => {
       polyline(hours.map(h => h.illum * 100), Y); c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.3)'; c.stroke();
-      polyline(hours.map(h => h.illum * 100), Y); c.lineWidth = 1.6; c.strokeStyle = '#ff4fd8'; c.stroke();
+      polyline(hours.map(h => h.illum * 100), Y); c.lineWidth = 1.6; c.strokeStyle = '#ffa646'; c.stroke();
       polyline(hours.map(h => (h.moonAlt > 0 ? h.moonAlt : null)), Y); c.lineWidth = 2.2; c.strokeStyle = '#3d7bff'; c.stroke();
     },
   });
