@@ -2372,7 +2372,7 @@ init();
     const data = await fcPromise;
     if (data) addForecast(m, set, data); else set.fcError = true;
     if (sets[m] !== set) return;
-    set.pos = Math.max(0, nObs - 1);   // start on the latest observation
+    set.pos = 0;   // start at the beginning: the oldest observation
     set.nObs = nObs;
     if (m === mode) show();
     // the observed frames, newest first, three at a time
