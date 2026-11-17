@@ -301,7 +301,7 @@ main > section#week { padding-top: var(--s-6); }
 .sw { flex: none; width: var(--s-4); height: var(--s-3); }
 .sw--cloud { background: var(--cloud); }
 .sw--moon { background: var(--moon-lit); }
-.sw--line { height: 3px; background: #ff3030; }
+.sw--line { height: 1.5px; background: #ff3030; }
 .sw--moonalt { height: 2px; background: #3d7bff; }
 .sw--sel { height: var(--s-3); border: 1.5px solid #fff; }
 .sw--range { height: var(--s-2); border-block: 1px solid #ff3030; }
@@ -319,7 +319,7 @@ main > section#week { padding-top: var(--s-6); }
 
 /* ---------- week cloud chart and the model comparison ---------- */
 .week-inner { position: relative; }
-#week-cv { width: 100%; height: 440px; cursor: pointer; }
+#week-cv { width: 100%; height: 440px; cursor: pointer; touch-action: pan-y; }
 .week-head { max-width: none; display: grid; grid-template-columns: minmax(0, 760px) auto; justify-content: space-between; align-items: end; gap: var(--s-5) var(--s-7); }
 .week-head > div:first-child { display: grid; gap: var(--s-4); }
 .week-tip {
@@ -629,7 +629,6 @@ table.plain caption { padding-bottom: var(--s-2); text-align: left; font: 500 va
       <div class="scroll"><div class="week-inner"><canvas id="week-cv" role="img" aria-label="Cloud cover forecast for the coming eight days"></canvas></div></div>
       <div class="legend week-legend">
         <span><i class="sw sw--line"></i><span id="week-model">Best match</span></span>
-        <span><i class="sw sw--range"></i>Likely range (ECMWF ensemble)</span>
         <span><i class="sw sw--moonalt"></i>Moon height</span>
         <span><i class="sw sw--sel"></i>Selected night</span>
       </div>
@@ -1648,8 +1647,8 @@ function weekAstro(t) {
 }
 /* Three panels on one time axis; the colours flow from hour to hour (each column takes the value between the two
    nearest hours, lightly smoothed, through the same colour scale), so neighbouring hours blend instead of making bars:
-   cloud: blue under 50 % (the bluer, the clearer), grey over 50 % (the darker, the thicker), a thick red line for the
-   forecast and thin red lines for the likely range; rain: the redder, the wetter, with a white line; moon: the
+   cloud: blue under 50 % (the bluer, the clearer), grey over 50 % (the darker, the thicker), a thin red line for the
+   forecast; rain: the redder, the wetter, with a white line; moon: the
    lighter, the fuller (thin red line), with its height above the horizon as a blue line. */
 const WEEK_H = 440;
 function weekCloudRGB(cl) {
@@ -1673,7 +1672,7 @@ function drawWeek() {
   const X = t => padL + (t - t0) / (t1 - t0) * PW;
   Object.assign(week, { t0, t1, padL, PW });
   $('#week-model').textContent = MODELS.find(mm => mm.id === state.model).name;
-  weekReadout(Math.floor(Date.now() / HOUR) * HOUR);
+  weekReadout(weekRest());
 
   const S = state.W, ink = cssVar('--star'), dim = cssVar('--dim'), mono = cssVar('--f-mono'), sans = cssVar('--f-body');
   const RED = '#ff3030', RAIN_BG = [18, 27, 61], hours = [];
@@ -1687,7 +1686,7 @@ function drawWeek() {
   const pass = (vals) => vals.map((v0, i) => { let sm = 0, w = 0; [[-1, 1], [0, 2], [1, 1]].forEach(([o, k]) => { const v = vals[i + o]; if (nn(v)) { sm += k * v; w += k; } }); return nn(v0) && w ? sm / w : null; });
   const smooth = (get, n = 1) => { let v = hours.map(get); for (let k = 0; k < n; k++) v = pass(v); return v; };
   const LINE = compact ? 3 : 1, BAND = compact ? 6 : 3;
-  const cloudLine = smooth(h => h.cloud, LINE), p10 = smooth(h => (h.ens ? h.ens.p10 : null), LINE), p90 = smooth(h => (h.ens ? h.ens.p90 : null), LINE);
+  const cloudLine = smooth(h => h.cloud, LINE);
   const maxRain = Math.max(0, ...hours.map(h => (nn(h.precip) ? h.precip : 0)));
   const rainMax = maxRain <= 1 ? 1 : Math.min(4, Math.ceil(maxRain));   // a downpour saturates instead of flattening the rest
 
@@ -1764,9 +1763,8 @@ function drawWeek() {
     key: [[0, 'rgb(24,64,240)'], [0.495, 'rgb(196,210,255)'], [0.505, 'rgb(228,230,234)'], [1, 'rgb(20,22,26)']],
     draw: Y => {
       c.lineJoin = 'round';
-      for (const v of [p10, p90]) { polyline(v, Y); c.lineWidth = 1.2; c.strokeStyle = RED; c.stroke(); }
-      polyline(cloudLine, Y); c.lineWidth = 4.5; c.strokeStyle = 'rgba(0,0,0,.35)'; c.stroke();
-      polyline(cloudLine, Y); c.lineWidth = 2.6; c.strokeStyle = RED; c.stroke();
+      polyline(cloudLine, Y); c.lineWidth = 2.6; c.strokeStyle = 'rgba(0,0,0,.3)'; c.stroke();
+      polyline(cloudLine, Y); c.lineWidth = 1.2; c.strokeStyle = RED; c.stroke();
     },
   });
   top = panel(top, 'Rain (mm per hour)', 52, {
@@ -1792,6 +1790,14 @@ function weekPoint(e) {
   if (!week.PW || x < week.padL || x > week.padL + week.PW) return null;
   return { x, t: week.t0 + (x - week.padL) / week.PW * (week.t1 - week.t0) };
 }
+/* where the readout rests when nothing points at the chart: the hour last picked on it (while that night is still
+   the selected one), else now for tonight, else the middle of the selected night */
+function weekRest() {
+  const nowH = Math.floor(Date.now() / HOUR) * HOUR, n = state.nights[state.nightIdx];
+  if (week.pin && week.pin.night === state.nightIdx) return week.pin.t;
+  if (!n || state.nightIdx === 0) return nowH;
+  return Math.floor((n.start.valueOf() + n.end.valueOf()) / 2 / HOUR) * HOUR;
+}
 function weekHover(e) {
   const p = weekPoint(e);
   if (p) weekReadout(Math.floor(p.t / HOUR) * HOUR);
@@ -1807,9 +1813,11 @@ function weekReadout(t) {
 function weekClick(e) {
   const p = weekPoint(e);
   if (!p) return;
+  const t = Math.floor(p.t / HOUR) * HOUR;
   const idx = state.nights.findIndex(n => p.t >= n.start && p.t < n.end);
-  if (idx < 0) return;
+  if (idx < 0) { week.pin = { t, night: state.nightIdx }; weekReadout(t); return; }   // a daytime hour: show it, keep the night
   state.nightIdx = idx;
+  week.pin = { t, night: idx };
   keepInPlace($('#week-cv'), renderSelected);   // the page stays where it is: the chart shows the picked night where you clicked
 }
 /* run a re-render without the page moving: the sections above can change height (a longer or shorter summary),
@@ -2121,8 +2129,9 @@ function init() {
     nightsBtn.textContent = open ? 'Show fewer nights' : 'Show all nights';
   });
   const wcv = $('#week-cv');
-  wcv.addEventListener('mousemove', weekHover);
-  wcv.addEventListener('mouseleave', () => weekReadout(Math.floor(Date.now() / HOUR) * HOUR));
+  wcv.addEventListener('pointermove', weekHover);
+  wcv.addEventListener('pointerdown', weekHover);
+  wcv.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') weekReadout(weekRest()); });
   wcv.addEventListener('click', weekClick);
 
   const sel = $('#model');
