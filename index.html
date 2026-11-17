@@ -318,7 +318,7 @@ main > section#week { padding-top: var(--s-6); }
 .fact .det { display: block; margin-top: var(--s-1); font: 400 var(--t-small)/1.5 var(--font-text); color: var(--muted); }
 
 /* ---------- week cloud chart and the model comparison ---------- */
-.week-inner { position: relative; min-width: 720px; }
+.week-inner { position: relative; }
 #week-cv { width: 100%; height: 440px; cursor: pointer; }
 .week-head { max-width: none; display: grid; grid-template-columns: minmax(0, 760px) auto; justify-content: space-between; align-items: end; gap: var(--s-5) var(--s-7); }
 .week-head > div:first-child { display: grid; gap: var(--s-4); }
@@ -1646,7 +1646,8 @@ function weekAstro(t) {
   }
   return a;
 }
-/* Three panels on one time axis, each hour its own block (no smoothing of the colours, no dimming of the day):
+/* Three panels on one time axis; the colours flow from hour to hour (each column takes the value between the two
+   nearest hours, lightly smoothed, through the same colour scale), so neighbouring hours blend instead of making bars:
    cloud: blue under 50 % (the bluer, the clearer), grey over 50 % (the darker, the thicker), a thick red line for the
    forecast and thin red lines for the likely range; rain: the redder, the wetter, with a white line; moon: the
    lighter, the fuller (thin red line), with its height above the horizon as a blue line. */
@@ -1667,7 +1668,8 @@ function drawWeek() {
   const [y, m, d] = ymd(Date.now());
   const mid = k => localNoon(y, m, d + k) - 12 * HOUR; // local midnight
   const t0 = mid(0), t1 = mid(DAYS);
-  const padL = 52, padR = 66, PW = Wd - padL - padR;
+  const compact = Wd < 560;   // a phone: narrower margins, no colour key on the right, day names over the dates
+  const padL = compact ? 30 : 52, padR = compact ? 8 : 66, PW = Wd - padL - padR;
   const X = t => padL + (t - t0) / (t1 - t0) * PW;
   Object.assign(week, { t0, t1, padL, PW });
   $('#week-model').textContent = MODELS.find(mm => mm.id === state.model).name;
@@ -1680,9 +1682,12 @@ function drawWeek() {
     const g = k => (i === undefined || !S.h[k] ? null : S.h[k][i]);
     hours.push({ t, cloud: g('cloud_cover'), precip: g('precipitation'), ens: S && S.ens ? S.ens.get(t) || null : null, ...weekAstro(t) });
   }
-  // the lines get a light 1-2-1 smoothing so they do not zigzag; the colour blocks stay hourly
-  const smooth = (get) => hours.map((h, i) => { let sm = 0, w = 0; [[-1, 1], [0, 2], [1, 1]].forEach(([o, k]) => { const x = hours[i + o], v = x ? get(x) : null; if (nn(v)) { sm += k * v; w += k; } }); return nn(get(h)) && w ? sm / w : null; });
-  const cloudLine = smooth(h => h.cloud), p10 = smooth(h => (h.ens ? h.ens.p10 : null)), p90 = smooth(h => (h.ens ? h.ens.p90 : null));
+  // 1-2-1 smoothing, repeated: the lines get one pass (three on a phone, where an hour is under two pixels wide),
+  // the colour band a few more, so a clear hour next to an overcast one fades over a few hours instead of a seam
+  const pass = (vals) => vals.map((v0, i) => { let sm = 0, w = 0; [[-1, 1], [0, 2], [1, 1]].forEach(([o, k]) => { const v = vals[i + o]; if (nn(v)) { sm += k * v; w += k; } }); return nn(v0) && w ? sm / w : null; });
+  const smooth = (get, n = 1) => { let v = hours.map(get); for (let k = 0; k < n; k++) v = pass(v); return v; };
+  const LINE = compact ? 3 : 1, BAND = compact ? 6 : 3;
+  const cloudLine = smooth(h => h.cloud, LINE), p10 = smooth(h => (h.ens ? h.ens.p10 : null), LINE), p90 = smooth(h => (h.ens ? h.ens.p90 : null), LINE);
   const maxRain = Math.max(0, ...hours.map(h => (nn(h.precip) ? h.precip : 0)));
   const rainMax = maxRain <= 1 ? 1 : Math.min(4, Math.ceil(maxRain));   // a downpour saturates instead of flattening the rest
 
@@ -1693,10 +1698,14 @@ function drawWeek() {
   function panel(top, title, PH, opts) {
     const Y = v => top + PH - clamp(v / opts.max) * PH;
     label(title, padL, top - 8, 'left', `500 13px ${sans}`, ink);
-    // hourly blocks
-    for (const h of hours) {
-      const x0 = X(h.t), x1 = X(h.t + HOUR);
-      c.fillStyle = opts.fill(h); c.fillRect(x0, top, x1 - x0 + 0.6, PH);
+    // the colour band: one column per device pixel, its value between the two nearest hours
+    const vals = smooth(opts.value, BAND), step = 1 / dpr;
+    for (let x = padL; x < padL + PW; x += step) {
+      const u = (x + step / 2 - padL) / PW * hours.length - 0.5, i = Math.floor(u), fr = u - i;
+      const a = vals[Math.max(0, Math.min(hours.length - 1, i))], b = vals[Math.max(0, Math.min(hours.length - 1, i + 1))];
+      const v = nn(a) && nn(b) ? a + (b - a) * fr : nn(a) ? a : b;
+      c.fillStyle = nn(v) ? opts.colour(v) : 'rgba(255,255,255,.06)';
+      c.fillRect(x, top, step + 0.01, PH);
     }
     // 50 % line and midnight lines
     c.lineWidth = 1; c.strokeStyle = opts.grid;
@@ -1717,15 +1726,25 @@ function drawWeek() {
     c.lineWidth = 1; c.strokeStyle = 'rgba(255,255,255,.35)'; c.strokeRect(padL + 0.5, top + 0.5, PW - 1, PH - 1);
     // scale on the left, colour key on the right
     c.textBaseline = 'middle';
-    for (const [v, t] of opts.ticks) label(t, padL - 8, Y(v), 'right', `500 13px ${mono}`, dim);
-    const kx = padL + PW + 14, kg = c.createLinearGradient(0, top + PH, 0, top);
-    opts.key.forEach(([p, col]) => kg.addColorStop(p, col));
-    c.fillStyle = kg; c.fillRect(kx, top, 12, PH);
-    c.strokeStyle = 'rgba(255,255,255,.35)'; c.strokeRect(kx + 0.5, top + 0.5, 11, PH - 1);
-    for (const [v, t] of opts.keyTicks) label(t, kx + 18, Y(v), 'left', `500 13px ${mono}`, dim);
+    for (const [v, t] of opts.ticks) label(t, padL - (compact ? 5 : 8), Y(v), 'right', `500 ${compact ? 11 : 13}px ${mono}`, dim);
+    if (!compact) {
+      const kx = padL + PW + 14, kg = c.createLinearGradient(0, top + PH, 0, top);
+      opts.key.forEach(([p, col]) => kg.addColorStop(p, col));
+      c.fillStyle = kg; c.fillRect(kx, top, 12, PH);
+      c.strokeStyle = 'rgba(255,255,255,.35)'; c.strokeRect(kx + 0.5, top + 0.5, 11, PH - 1);
+      for (const [v, t] of opts.keyTicks) label(t, kx + 18, Y(v), 'left', `500 13px ${mono}`, dim);
+    }
     // hours and days under the panel
     c.textBaseline = 'top';
     for (let k = 0; k <= DAYS; k++) {
+      if (compact) {   // no hour marks: the weekday and the date under each day
+        if (k < DAYS) {
+          const noon = mid(k) + 12 * HOUR;
+          label(F.wd.format(noon), X(noon), top + PH + 4, 'center', `500 11px ${mono}`, dim);
+          label(F.dnum.format(noon), X(noon), top + PH + 20, 'center', `500 13px ${sans}`, ink);
+        }
+        continue;
+      }
       label(k === DAYS ? '24' : '0', X(mid(k)), top + PH + 4, 'center', `500 13px ${mono}`, dim);
       if (k < DAYS) {
         const noon = mid(k) + 12 * HOUR;
@@ -1740,7 +1759,7 @@ function drawWeek() {
   let top = 26;
   top = panel(top, 'Cloud cover (%)', 120, {
     max: 100, grid: 'rgba(0,0,0,.35)', midnight: 'rgba(0,0,0,.6)',
-    fill: h => (nn(h.cloud) ? `rgb(${weekCloudRGB(h.cloud).join(',')})` : 'rgba(255,255,255,.06)'),
+    value: h => h.cloud, colour: v => `rgb(${weekCloudRGB(v).join(',')})`,
     ticks: [[0, '0'], [50, '50'], [100, '100']], keyTicks: [[0, '0'], [50, '50'], [100, '100']],
     key: [[0, 'rgb(24,64,240)'], [0.495, 'rgb(196,210,255)'], [0.505, 'rgb(228,230,234)'], [1, 'rgb(20,22,26)']],
     draw: Y => {
@@ -1752,14 +1771,14 @@ function drawWeek() {
   });
   top = panel(top, 'Rain (mm per hour)', 52, {
     max: rainMax, grid: 'rgba(255,255,255,.12)', midnight: 'rgba(255,255,255,.3)',
-    fill: h => { const r = nn(h.precip) ? clamp(h.precip / rainMax) : 0; return `rgb(${RAIN_BG.map((v, k) => Math.round(v + ([255, 48, 48][k] - v) * Math.min(1, r * 1.4))).join(',')})`; },
+    value: h => h.precip, colour: p => { const r = clamp(p / rainMax); return `rgb(${RAIN_BG.map((v, k) => Math.round(v + ([255, 48, 48][k] - v) * Math.min(1, r * 1.4))).join(',')})`; },
     ticks: [[0, '0'], [rainMax, String(rainMax)]], keyTicks: [[0, '0'], [rainMax, String(rainMax)]],
     key: [[0, `rgb(${RAIN_BG.join(',')})`], [1, 'rgb(255,48,48)']],
     draw: Y => { polyline(hours.map(h => h.precip), Y); c.lineWidth = 2; c.strokeStyle = '#fff'; c.stroke(); },
   });
   panel(top, 'Moon: phase (%) and height (°)', 60, {
     max: 100, grid: 'rgba(0,0,0,.25)', midnight: 'rgba(0,0,0,.45)',
-    fill: h => `rgb(${[14, 19, 38].map((v, k) => Math.round(v + ([236, 230, 212][k] - v) * h.illum)).join(',')})`,
+    value: h => h.illum, colour: il => `rgb(${[14, 19, 38].map((v, k) => Math.round(v + ([236, 230, 212][k] - v) * il)).join(',')})`,
     ticks: [[0, '0'], [50, '50'], [100, '100']], keyTicks: [[0, '0'], [100, '100']],
     key: [[0, 'rgb(14,19,38)'], [1, 'rgb(236,230,212)']],
     draw: Y => {
