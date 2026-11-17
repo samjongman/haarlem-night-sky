@@ -2162,7 +2162,7 @@ init();
 /* The radar: the last two hours as observed, then the next 24 hours as forecast, on our own map of the Netherlands.
    Observed clouds: Meteosat (MTG) infrared images from EUMETSAT, the grey level turned into cloud white.
    Observed rain: RainViewer's radar composite; each of its colours is read back as a rain strength and redrawn.
-   Forecast: the KNMI Harmonie model through Open-Meteo, sampled on an 11 x 11 grid and drawn as a smooth field.
+   Forecast: the KNMI Harmonie model through Open-Meteo, sampled on a 17 x 17 grid and drawn as a smooth field.
    The slider glides: between two frames of the same kind the clouds and rain are moved along the motion measured
    between them (and faded where they grow or shrink), so dragging and Play move smoothly instead of blinking.
    Nothing loads until the section is near the screen; the other layer loads only when it is first chosen. */
@@ -2174,7 +2174,7 @@ init();
   const DW = 700, DH = Math.round(DW * ASPECT);            // observed data is drawn at this size
   const FW = 175, FH = Math.round(FW * ASPECT);            // the forecast field (smoothed when it is drawn larger)
   const STEP = 600e3, PAST = 13, AHEAD = 24;               // 10-minute observed frames over two hours, 24 forecast hours
-  const GRID = { lon0: 2.9, dlon: 0.47, nx: 11, lat0: 50.6, dlat: 0.32, ny: 11 };
+  const GRID = { lon0: 2.9, dlon: 4.7 / 16, nx: 17, lat0: 50.6, dlat: 0.2, ny: 17 };
   const CITIES = [['Haarlem', 52.381, 4.637, 1, 'l'], ['Amsterdam', 52.373, 4.893, 0, 'r'], ['Rotterdam', 51.924, 4.478, 0, 'r'],
     ['Utrecht', 52.091, 5.122, 0, 'r'], ['Groningen', 53.219, 6.566, 0, 'r'], ['Eindhoven', 51.441, 5.478, 0, 'r'],
     ['Maastricht', 50.851, 5.691, 0, 'r'], ['Zwolle', 52.517, 6.083, 0, 'r']];
@@ -2183,7 +2183,7 @@ init();
   const msg = $id('radar-msg'), section = $id('radar'), spanObs = $id('radar-span-obs'), spanFc = $id('radar-span-fc');
   if (!cv) return;
   const btns = [...document.querySelectorAll('[data-radar]')], keys = [...document.querySelectorAll('[data-radar-key]')];
-  const KEY = 'haarlem-night-sky-radar', FC_KEY = 'haarlem-night-sky-radar-forecast', TZ = 'Europe/Amsterdam';
+  const KEY = 'haarlem-night-sky-radar', FC_KEY = 'haarlem-night-sky-radar-forecast-3', TZ = 'Europe/Amsterdam';
   const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
   let mode = 'cloud';
@@ -2262,30 +2262,46 @@ init();
     const lats = [], lons = [];
     for (let j = 0; j < GRID.ny; j++) for (let i = 0; i < GRID.nx; i++) { lats.push((GRID.lat0 + j * GRID.dlat).toFixed(3)); lons.push((GRID.lon0 + i * GRID.dlon).toFixed(3)); }
     const url = 'https://api.open-meteo.com/v1/forecast?' + new URLSearchParams({ latitude: lats.join(','), longitude: lons.join(','),
-      hourly: 'cloud_cover,precipitation', models: 'knmi_seamless', forecast_hours: String(AHEAD + 1), timeformat: 'unixtime', timezone: 'GMT' });
+      hourly: 'cloud_cover,precipitation,wind_speed_700hPa,wind_direction_700hPa,wind_speed_850hPa,wind_direction_850hPa', models: 'knmi_seamless', forecast_hours: String(AHEAD + 1), timeformat: 'unixtime', timezone: 'GMT' });
     const j = await (await fetch(url)).json();
     if (!Array.isArray(j)) throw new Error((j && j.reason) || 'forecast');
     const times = j[0].hourly.time.map((t) => t * 1000);
-    const data = { times, cloud: times.map((_, k) => j.map((p) => p.hourly.cloud_cover[k])), rain: times.map((_, k) => j.map((p) => p.hourly.precipitation[k])) };
+    const data = { times, cloud: times.map((_, k) => j.map((p) => p.hourly.cloud_cover[k])), rain: times.map((_, k) => j.map((p) => p.hourly.precipitation[k])), u: [], v: [] };
+    // the wind each point's clouds drift with, in km/h toward the east (u) and the north (v): the mean of the two levels
+    times.forEach((_, k) => {
+      const u = [], v = [];
+      for (const p of j) {
+        let su = 0, sv = 0, n = 0;
+        for (const lv of ['700hPa', '850hPa']) {
+          const sp = p.hourly['wind_speed_' + lv], dr = p.hourly['wind_direction_' + lv];
+          if (!sp || !dr || sp[k] == null || dr[k] == null) continue;
+          const r = dr[k] * Math.PI / 180; su -= sp[k] * Math.sin(r); sv -= sp[k] * Math.cos(r); n++;
+        }
+        u.push(n ? Math.round(su / n * 10) / 10 : null); v.push(n ? Math.round(sv / n * 10) / 10 : null);
+      }
+      data.u.push(u); data.v.push(v);
+    });
     try { localStorage.setItem(FC_KEY, JSON.stringify({ at: Date.now(), data })); } catch (e) { /* ignore */ }
     return data;
   };
   // rain in mm per hour to the strength scale the radar uses (drizzle, light, steady, heavy)
   const mmStrength = (mm) => (mm < 0.1 ? 0.05 + mm / 0.1 * 0.13 : mm < 0.5 ? 0.2 + (mm - 0.1) / 0.4 * 0.2 : mm < 2 ? 0.4 + (mm - 0.5) / 1.5 * 0.22 : mm < 10 ? 0.62 + (mm - 2) / 8 * 0.3 : 0.95);
-  // a smooth field from the coarse grid: Catmull-Rom (bicubic) interpolation, soft edges where rain starts, a light blur
-  const cubic = (p0, p1, p2, p3, t) => p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
+  // a smooth field from the grid: a cubic B-spline (round, no bump at each grid point), soft edges where rain starts, a light blur
+  const cubic = (p0, p1, p2, p3, t) => { const t2 = t * t, t3 = t2 * t, u = 1 - t; return (u * u * u * p0 + (3 * t3 - 6 * t2 + 4) * p1 + (-3 * t3 + 3 * t2 + 3 * t + 1) * p2 + t3 * p3) / 6; };
+  const PAD = 8;
   const fieldFrame = (vals, kind) => {
-    const c = canvas(FW, FH), g = c.getContext('2d'), d = g.createImageData(FW, FH), p = d.data;
+    const PW = FW + 2 * PAD, PH = FH + 2 * PAD;
+    const c = canvas(PW, PH), g = c.getContext('2d'), d = g.createImageData(PW, PH), p = d.data;
     const v = (i, j) => { i = Math.max(0, Math.min(GRID.nx - 1, i)); j = Math.max(0, Math.min(GRID.ny - 1, j)); const x = vals[j * GRID.nx + i]; return x == null ? 0 : x; };
-    for (let y = 0; y < FH; y++) {
+    for (let y = -PAD; y < FH + PAD; y++) {
       const my = Y1 - (y + 0.5) / FH * (Y1 - Y0), lat = (2 * Math.atan(Math.exp(my / RE)) - Math.PI / 2) * 180 / Math.PI;
       const gy = clamp((lat - GRID.lat0) / GRID.dlat, 0, GRID.ny - 1), j1 = Math.min(GRID.ny - 2, Math.floor(gy)), fy = gy - j1;
-      for (let x = 0; x < FW; x++) {
+      for (let x = -PAD; x < FW + PAD; x++) {
         const lon = EXT.w + (x + 0.5) / FW * (EXT.e - EXT.w);
         const gx = clamp((lon - GRID.lon0) / GRID.dlon, 0, GRID.nx - 1), i1 = Math.min(GRID.nx - 2, Math.floor(gx)), fx = gx - i1;
         const row = (j) => cubic(v(i1 - 1, j), v(i1, j), v(i1 + 1, j), v(i1 + 2, j), fx);
         const val = Math.max(0, cubic(row(j1 - 1), row(j1), row(j1 + 1), row(j1 + 2), fy));
-        const k = (y * FW + x) * 4;
+        const k = ((y + PAD) * PW + x + PAD) * 4;
         if (kind === 'cloud') { const al = Math.pow(clamp(val / 100), 1.15); p[k] = 236; p[k + 1] = 242; p[k + 2] = 255; p[k + 3] = Math.round(al * 200); }
         else {
           const soft = clamp((val - 0.02) / 0.25);   // fades in from 0.02 mm instead of a hard edge
@@ -2296,14 +2312,14 @@ init();
     }
     g.putImageData(d, 0, 0);
     const out = canvas(FW, FH), og = out.getContext('2d');
-    og.filter = 'blur(1.6px)'; og.drawImage(c, 0, 0);   // where canvas filters are unsupported this simply draws it unblurred
+    og.filter = 'blur(1.6px)'; og.drawImage(c, -PAD, -PAD);   // where canvas filters are unsupported this simply draws it unblurred
     return out;
   };
 
   /* ---- a layer's frames: observed first, then forecast hours after the last observation */
   const addForecast = (m, set, data) => {
     const lastObs = set.frames.filter((f) => !f.fc).reduce((a, f) => Math.max(a, f.t), 0) || Date.now() - 30 * 60e3;
-    data.times.forEach((t, k) => { if (t > lastObs + 5 * 60e3) set.frames.push({ t, fc: true, img: fieldFrame(data[m][k], m) }); });
+    data.times.forEach((t, k) => { if (t > lastObs + 5 * 60e3) set.frames.push({ t, fc: true, img: fieldFrame(data[m][k], m), wu: data.u && data.u[k], wv: data.v && data.v[k] }); });
     set.fcReady = true;
   };
   const loadSet = async (m) => {
@@ -2372,7 +2388,7 @@ init();
     return [bx, by];
   };
   // each block's own shift, searched close to the global one; how sure we are depends on how much better it fits
-  const localField = (a, b, g0, g1, r) => {
+  const localField = (a, b, g0, g1, r, stiff) => {
     const N = NBX * NBY, vx = new Float32Array(N), vy = new Float32Array(N), wt = new Float32Array(N), area = BS * BS;
     for (let by = 0; by < NBY; by++) for (let bx = 0; bx < NBX; bx++) {
       const ox = bx * BSTEP, oy = by * BSTEP, k = by * NBX + bx;
@@ -2388,7 +2404,7 @@ init();
           for (let x = 0; x < BS; x += 2) d += Math.abs(a[ra + x] - b[yy + Math.max(0, Math.min(QW - 1, ox + x + dx))]);
         }
         d /= area / 4; sum += d; cnt++;
-        const c = d + 0.5 * Math.hypot(dx - g0, dy - g1);
+        const c = d + stiff * Math.hypot(dx - g0, dy - g1);
         if (c < best) { best = c; bs = d; vx[k] = dx; vy[k] = dy; }
       }
       wt[k] = Math.min(1, Math.max(0, (sum / cnt - bs) / 8)) + 0.02;
@@ -2396,12 +2412,12 @@ init();
     return [vx, vy, wt];
   };
   // a median drops single wrong blocks, then weighted averages spread the sure blocks' motion over the unsure ones
-  const smoothField = (vx, vy, wt) => {
+  const smoothField = (vx, vy, wt, passes) => {
     const near = (k) => { const bx = k % NBX, by = (k / NBX) | 0, o = []; for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) { const x = bx + i, y = by + j; if (x >= 0 && y >= 0 && x < NBX && y < NBY) o.push(y * NBX + x); } return o; };
     const N = vx.length, nb = Array.from({ length: N }, (_, k) => near(k));
     const med = (v) => v.map((_, k) => { const a = nb[k].map((n) => v[n]).sort((p, q) => p - q); return a[a.length >> 1]; });
     let X = med(vx), Y = med(vy);
-    for (let pass = 0; pass < 3; pass++) {
+    for (let pass = 0; pass < passes; pass++) {
       const X2 = new Float32Array(N), Y2 = new Float32Array(N);
       for (let k = 0; k < N; k++) {
         let sw = 0, sx = 0, sy = 0;
@@ -2412,15 +2428,68 @@ init();
     }
     return { X, Y };
   };
+  const trustScale = (a, b, v) => {
+    const c0 = BS / 2 - 0.5, fx = new Float32Array(QW * QH), fy = new Float32Array(QW * QH);
+    for (let y = 0, i = 0; y < QH; y++) {
+      const gy = Math.max(0, Math.min(NBY - 1.0001, (y - c0) / BSTEP)), j0 = gy | 0, ty = gy - j0;
+      for (let x = 0; x < QW; x++, i++) {
+        const gx = Math.max(0, Math.min(NBX - 1.0001, (x - c0) / BSTEP)), i0 = gx | 0, tx = gx - i0, k = j0 * NBX + i0;
+        const w00 = (1 - tx) * (1 - ty), w01 = tx * (1 - ty), w10 = (1 - tx) * ty, w11 = tx * ty;
+        fx[i] = v.X[k] * w00 + v.X[k + 1] * w01 + v.X[k + NBX] * w10 + v.X[k + NBX + 1] * w11;
+        fy[i] = v.Y[k] * w00 + v.Y[k + 1] * w01 + v.Y[k + NBX] * w10 + v.Y[k + NBX + 1] * w11;
+      }
+    }
+    let best = Infinity, keep = 0;
+    for (const sc of [0, 0.25, 0.5, 0.75, 1]) {
+      let e = 0, n = 0;
+      for (let y = 1; y < QH; y += 2) for (let x = 1; x < QW; x += 2) {
+        const i = y * QW + x, sx = x - sc * fx[i], sy = y - sc * fy[i];
+        if (sx < 0 || sy < 0 || sx > QW - 1.001 || sy > QH - 1.001) continue;
+        const x0 = sx | 0, y0 = sy | 0, tx = sx - x0, ty = sy - y0, k = y0 * QW + x0;
+        const av = (a[k] * (1 - tx) + a[k + 1] * tx) * (1 - ty) + (a[k + QW] * (1 - tx) + a[k + QW + 1] * tx) * ty;
+        e += Math.abs(av - b[i]); n++;
+      }
+      const c = (e / Math.max(1, n)) * (1 + 0.08 * sc);   // a little doubt about every extra bit of motion
+      if (c < best) { best = c; keep = sc; }
+    }
+    return keep;
+  };
+  // the forecast's own wind over a step, as the same block field the matcher makes (in quarter pixels)
+  const windField = (A, B) => {
+    const hours = (B.t - A.t) / 3600e3, N = NBX * NBY, X = new Float32Array(N), Y = new Float32Array(N), c0 = BS / 2 - 0.5;
+    const pxM = (X1 - X0) / QW;   // Mercator metres per quarter pixel
+    const at = (arr, k, tx, ty) => { const v = (n) => (arr[n] == null ? 0 : arr[n]); return (v(k) * (1 - tx) + v(k + 1) * tx) * (1 - ty) + (v(k + GRID.nx) * (1 - tx) + v(k + GRID.nx + 1) * tx) * ty; };
+    for (let by = 0; by < NBY; by++) {
+      const my = Y1 - (by * BSTEP + c0 + 0.5) / QH * (Y1 - Y0), lat = (2 * Math.atan(Math.exp(my / RE)) - Math.PI / 2) * 180 / Math.PI;
+      const gy = clamp((lat - GRID.lat0) / GRID.dlat, 0, GRID.ny - 1.0001), j0 = gy | 0, ty = gy - j0;
+      const scale = 1000 * hours / (pxM * Math.cos(lat * Math.PI / 180));   // km/h over the step, in quarter pixels
+      for (let bx = 0; bx < NBX; bx++) {
+        const lon = EXT.w + (bx * BSTEP + c0 + 0.5) / QW * (EXT.e - EXT.w);
+        const gx = clamp((lon - GRID.lon0) / GRID.dlon, 0, GRID.nx - 1.0001), i0 = gx | 0, tx = gx - i0, k = j0 * GRID.nx + i0;
+        X[by * NBX + bx] = (at(A.wu, k, tx, ty) + at(B.wu, k, tx, ty)) / 2 * scale;
+        Y[by * NBX + bx] = -(at(A.wv, k, tx, ty) + at(B.wv, k, tx, ty)) / 2 * scale;
+      }
+    }
+    return { X, Y };
+  };
   const motion = (A, B) => {
     if (A.mo && A.mo.to === B) return A.mo.v;
     let v = null;
     try {
-      const qa = alphaQ(A), qb = alphaQ(B), fc = !!A.fc;
-      // ten minutes apart a shift of 8 eighths (about 30 km) is plenty; an hour apart allow 18 (about 65 km)
-      const [gx, gy] = globalShift(halve(qa, QW, QH), halve(qb, QW, QH), EW, EH, fc ? 18 : 8);
-      const [vx, vy, wt] = localField(qa, qb, gx * 2, gy * 2, fc ? 5 : 3);
-      v = smoothField(vx, vy, wt);
+      const qa = alphaQ(A), qb = alphaQ(B);
+      if (A.fc) v = A.wu && B.wu ? windField(A, B) : null;
+      else {
+        // ten minutes apart a shift of 8 eighths (about 30 km) is plenty
+        const [gx, gy] = globalShift(halve(qa, QW, QH), halve(qb, QW, QH), EW, EH, 8);
+        const [vx, vy, wt] = localField(qa, qb, gx * 2, gy * 2, 3, 0.5);
+        v = smoothField(vx, vy, wt, 3);
+      }
+      if (!v) throw new Error('no motion');
+      // observed pairs keep the share of their measured motion that fits best; forecast hours always drift with the wind
+      // (a little slower than the wind itself, as the observed clouds do), so the speed does not change from hour to hour
+      const k = A.fc ? 0.9 : trustScale(qa, qb, v);
+      if (k !== 1) { v.X = v.X.map((x) => x * k); v.Y = v.Y.map((y) => y * k); }
+      v.k = k;
     } catch (e) { v = null; }
     A.mo = { to: B, v };
     return v;
@@ -2448,10 +2517,17 @@ vec2 flowAt(vec2 uv) {
                mix(texelFetch(uF, i + ivec2(0, 1), 0).rg, texelFetch(uF, i + ivec2(1, 1), 0).rg, t.x), t.y);
   return v / uQ;
 }
+float inside(vec2 p) {
+  vec2 e = vec2(0.12), a = smoothstep(vec2(0.0), e, p) * smoothstep(vec2(0.0), e, 1.0 - p);
+  return a.x * a.y;
+}
 void main() {
   vec2 uv = vec2(gl_FragCoord.x / uSize.x, 1.0 - gl_FragCoord.y / uSize.y);
-  vec2 d = flowAt(uv);
-  o = texture(uA, uv - uT * d) * (1.0 - uT) + texture(uB, uv + (1.0 - uT) * d) * uT;
+  vec2 d = flowAt(uv), pa = uv - uT * d, pb = uv + (1.0 - uT) * d;
+  float wa = (1.0 - uT) * inside(pa), wb = uT * inside(pb), sw = wa + wb;
+  vec4 fade = texture(uA, uv) * (1.0 - uT) + texture(uB, uv) * uT;
+  vec4 moved = (texture(uA, pa) * wa + texture(uB, pb) * wb) / max(sw, 1e-4);
+  o = mix(fade, moved, smoothstep(0.0, 0.08, sw));
 }`));
     gl.linkProgram(p);
     if (gl.getProgramParameter(p, gl.LINK_STATUS)) {
