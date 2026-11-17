@@ -2747,12 +2747,15 @@ void main() {
     show();
   };
   btns.forEach((b) => b.addEventListener('click', () => choose(b.dataset.radar)));
-  slider.addEventListener('input', () => { const set = sets[mode]; if (!set || !set.frames.length) return; set.pos = minToPos(set, +slider.value); show(); });
+  // moving the slider by hand (mouse, finger or keys) pauses Play, so the frame stays where it was put
+  const pauseByHand = () => { if (play.getAttribute('aria-pressed') === 'true') setPlaying(false); };
+  slider.addEventListener('pointerdown', pauseByHand);
+  slider.addEventListener('input', () => { pauseByHand(); const set = sets[mode]; if (!set || !set.frames.length) return; set.pos = minToPos(set, +slider.value); show(); });
   // the arrow keys step ten minutes, Page Up and Page Down an hour
   slider.addEventListener('keydown', (e) => {
     const d = { ArrowLeft: -10, ArrowDown: -10, ArrowRight: 10, ArrowUp: 10, PageDown: -60, PageUp: 60 }[e.key], set = sets[mode];
     if (!d || !set || !set.frames.length) return;
-    e.preventDefault();
+    e.preventDefault(); pauseByHand();
     set.pos = minToPos(set, Math.max(0, Math.min(spanMin(set), posToMin(set, set.pos) + d))); show();
   });
 
