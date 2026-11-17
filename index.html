@@ -303,7 +303,7 @@ main > section#week { padding-top: var(--s-6); }
 .sw--moon { background: var(--moon-lit); }
 .sw--line { height: 1.5px; background: #ff3030; }
 .sw--moonalt { height: 2px; background: #3d7bff; }
-.sw--sel { height: var(--s-3); border: 1.5px solid #fff; }
+.sw--sel { height: var(--s-3); border: 1.5px solid #ffd23f; }
 .sw--range { height: var(--s-2); border-block: 1px solid #ff3030; }
 .bar-g { flex: none; width: 144px; height: var(--s-3); }
 .events { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--s-4) var(--gutter); }
@@ -620,13 +620,13 @@ table.plain caption { padding-bottom: var(--s-2); text-align: left; font: 500 va
     <div class="wrap">
       <div class="section-head week-head">
         <div>
-          <h2 id="h-week">Cloud forecast this week</h2>
+          <h2 id="h-week">Clouds, rain and moon this week</h2>
           <p>Blue means less than half the sky is cloudy, and the bluer the clearer. Grey means more than half, and the darker the thicker. Under it: rain, and the moon's phase and height. Click a night to open it.</p>
         </div>
         <div class="week-tip" id="week-tip" role="status"></div>
       </div>
       <div class="ui ui-week">
-      <div class="scroll"><div class="week-inner"><canvas id="week-cv" role="img" aria-label="Cloud cover forecast for the coming eight days"></canvas></div></div>
+      <div class="scroll"><div class="week-inner"><canvas id="week-cv" role="img" aria-label="Cloud cover, rain and moon for the coming eight days"></canvas></div></div>
       <div class="legend week-legend">
         <span><i class="sw sw--line"></i><span id="week-model">Best match</span></span>
         <span><i class="sw sw--moonalt"></i>Moon height</span>
@@ -1715,7 +1715,7 @@ function drawWeek() {
     // the selected night and now
     if (sel && sel.sunset && sel.sunrise) {
       const xa = Math.max(padL, X(sel.sunset.getTime())), xb = Math.min(padL + PW, X(sel.sunrise.getTime()));
-      if (xb > xa) { c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.45)'; c.strokeRect(xa, top + 1, xb - xa, PH - 2); c.lineWidth = 1.5; c.strokeStyle = '#fff'; c.strokeRect(xa, top + 1, xb - xa, PH - 2); }
+      if (xb > xa) { c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.45)'; c.strokeRect(xa, top + 1, xb - xa, PH - 2); c.lineWidth = 1.5; c.strokeStyle = '#ffd23f'; c.strokeRect(xa, top + 1, xb - xa, PH - 2); }
     }
     if (now > t0 && now < t1) {
       const x = Math.round(X(now)) + 0.5;
