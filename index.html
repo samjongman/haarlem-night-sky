@@ -343,7 +343,7 @@ main > section#week { padding-top: var(--s-6); }
   background: rgb(17 26 58 / .85); font-size: var(--t-small); color: var(--ink); }
 .radar__msg[hidden] { display: none; }
 .radar__controls { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--s-4); }
-.radar__play { gap: var(--s-2); min-width: 104px; }
+.radar__play { gap: var(--s-2); width: 124px; justify-content: center; }
 .radar__play svg { width: 12px; height: 12px; fill: currentColor; }
 .radar__play .i-pause, .radar__play.is-playing .i-play { display: none; }
 .radar__play.is-playing .i-pause { display: block; }
@@ -1439,6 +1439,7 @@ function renderHero(n) {
    and returns it. sky: the moon behind the page, its dark side only a trace and no outline. */
 function drawMoon(el, size, phaseDeg, sky) {
   if (!el) return null;
+  drawMoon.n = drawMoon.n || 0;
   const r = size / 2 - 1.5, cx = size / 2, cy = size / 2;
   let p = ((phaseDeg % 360) + 360) % 360;
   const flip = p > 180;   // waning: the lit side on the left
@@ -1446,9 +1447,39 @@ function drawMoon(el, size, phaseDeg, sky) {
   const rx = r * Math.cos(p * Math.PI / 180);
   // the lit part: the right half of the disc, closed by the terminator (an ellipse of half-width |rx|)
   const lit = `M${cx} ${cy - r}A${r} ${r} 0 0 1 ${cx} ${cy + r}A${Math.abs(rx).toFixed(2)} ${r} 0 0 ${rx > 0 ? 0 : 1} ${cx} ${cy - r}Z`;
+  const id = 'moon' + (++drawMoon.n), tf = flip ? ` transform="translate(${size} 0) scale(-1 1)"` : '';
+  // the near side as seen from the Netherlands, north up: positions and sizes in units of the moon's radius
+  const P = (x, y) => `${(cx + x * r).toFixed(2)} ${(cy + y * r).toFixed(2)}`;
+  const ell = (x, y, rx, ry, rot, fill) => `<ellipse cx="${(cx + x * r).toFixed(2)}" cy="${(cy + y * r).toFixed(2)}" rx="${(rx * r).toFixed(2)}" ry="${(ry * r).toFixed(2)}" transform="rotate(${rot} ${P(x, y)})" fill="${fill}"/>`;
+  // each sea is built from a few overlapping ellipses, drawn in one tone (the group's opacity, so overlaps do not darken)
+  // and softened at the edges
+  const maria = [
+    [-0.56, -0.02, 0.30, 0.50, 12], [-0.72, 0.22, 0.17, 0.24, 0], [-0.45, -0.30, 0.18, 0.15, 0],      // Oceanus Procellarum
+    [-0.30, -0.42, 0.27, 0.21, -10], [-0.13, -0.36, 0.14, 0.12, 0],                                      // Imbrium
+    [-0.04, -0.70, 0.40, 0.07, -4], [0.26, -0.66, 0.15, 0.05, 0],                                       // Frigoris
+    [0.17, -0.38, 0.16, 0.14, 0], [0.01, -0.17, 0.08, 0.06, 0],                                         // Serenitatis, Vaporum
+    [0.32, -0.10, 0.21, 0.16, 20], [0.42, 0.03, 0.12, 0.10, 0],                                         // Tranquillitatis
+    [0.68, -0.30, 0.12, 0.10, 0], [0.56, 0.18, 0.12, 0.17, 10], [0.36, 0.35, 0.09, 0.09, 0],          // Crisium, Fecunditatis, Nectaris
+    [-0.16, 0.40, 0.19, 0.13, 0], [-0.31, 0.29, 0.12, 0.09, 0], [-0.30, 0.13, 0.10, 0.08, 0],         // Nubium, Cognitum
+    [-0.30, 0.03, 0.12, 0.07, 0], [-0.52, 0.42, 0.10, 0.10, 0],                                         // Insularum, Humorum
+  ].map(([x, y, rx, ry, rot]) => ell(x, y, rx, ry, rot, 'currentColor')).join('');
+  // craters: Tycho with its rays, Copernicus, Kepler, Aristarchus (bright) and Plato (dark floor); only on the larger moons
+  const crater = (x, y, cr, rim, floor) => `<circle cx="${(cx + x * r).toFixed(2)}" cy="${(cy + y * r).toFixed(2)}" r="${(cr * r).toFixed(2)}" fill="${floor}" stroke="${rim}" stroke-width="${Math.max(0.6, r * 0.018).toFixed(2)}"/>`;
+  const rays = [20, 75, 130, 200, 250, 315].map((a) => { const t = a * Math.PI / 180; return `<line x1="${P(-0.12, 0.70)}" x2="${P(-0.12 + Math.cos(t) * 0.42, 0.70 + Math.sin(t) * 0.42)}" stroke="rgba(255,255,255,.22)" stroke-width="${(r * 0.02).toFixed(2)}" stroke-linecap="round"/>`.replace(/x1="([\d.]+) ([\d.]+)"/, 'x1="$1" y1="$2"').replace(/x2="([\d.]+) ([\d.]+)"/, 'x2="$1" y2="$2"'); }).join('');
+  const craters = size < 40 ? '' : rays
+    + crater(-0.12, 0.70, 0.045, 'rgba(255,255,255,.7)', 'rgba(255,255,255,.35)')
+    + crater(-0.28, -0.12, 0.05, 'rgba(255,255,255,.55)', 'rgba(150,146,150,.25)')
+    + crater(-0.50, -0.13, 0.03, 'rgba(255,255,255,.5)', 'rgba(255,255,255,.2)')
+    + crater(-0.68, -0.33, 0.025, 'rgba(255,255,255,.75)', 'rgba(255,255,255,.45)')
+    + crater(-0.10, -0.63, 0.04, 'rgba(255,255,255,.35)', 'rgba(70,70,90,.45)')
+    + crater(0.42, 0.62, 0.035, 'rgba(255,255,255,.35)', 'rgba(150,146,150,.2)')
+    + crater(0.22, 0.22, 0.03, 'rgba(255,255,255,.35)', 'rgba(150,146,150,.2)');
+  const lit0 = cssVar('--moon-lit');
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">`
+    + `<defs><clipPath id="${id}c"><path d="${lit}"${tf}/></clipPath>`
+    + `<filter id="${id}b" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="${(r * 0.035).toFixed(2)}"/></filter><radialGradient id="${id}g" cx="50%" cy="50%" r="50%"><stop offset="0.55" stop-color="${lit0}"/><stop offset="1" stop-color="${lit0}" stop-opacity=".82"/></radialGradient></defs>`
     + `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${cssVar('--moon-dark')}" fill-opacity="${sky ? 0.5 : 1}"/>`
-    + `<path d="${lit}" fill="${cssVar('--moon-lit')}"${flip ? ` transform="translate(${size} 0) scale(-1 1)"` : ''}/>`
+    + `<g clip-path="url(#${id}c)"><circle cx="${cx}" cy="${cy}" r="${r}" fill="${sky ? lit0 : '#0000'}"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="url(#${id}g)"/><g color="rgb(92, 94, 116)" opacity=".3" filter="url(#${id}b)">${maria}</g>${craters}</g>`
     + (sky ? '' : `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${cssVar('--cv-line-2')}" stroke-width="1"/>`)
     + '</svg>';
   const node = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
